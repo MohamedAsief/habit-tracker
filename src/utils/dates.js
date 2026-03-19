@@ -75,10 +75,38 @@ export function computeStats(habits, listLogs, today = new Date()) {
   return { total, weekCount, monthCount, streak, todayDone, todayRate, weekRate, monthRate }
 }
 
+// 1hr slots for journal (24 slots)
+export function getHourSlots() {
+  const slots = []
+  for (let h = 0; h < 24; h++) {
+    slots.push(`${String(h).padStart(2,'0')}:00`)
+  }
+  return slots
+}
+
+// Sub-slots for expanded hour
+export function getSubSlots(hour, granularity = 30) {
+  const slots = []
+  const h = String(hour).padStart(2,'0')
+  for (let m = 0; m < 60; m += granularity) {
+    slots.push(`${h}:${String(m).padStart(2,'0')}`)
+  }
+  return slots
+}
+
 export function getHalfHourSlots() {
   const slots = []
   for (let h = 0; h < 24; h++)
     for (let m = 0; m < 60; m += 30)
       slots.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`)
   return slots
+}
+
+export function slotToHours(slotKey) {
+  // e.g. "08:00" = 1hr, "08:30" = 0.5hr, "08:15" = 0.25hr
+  const [, m] = slotKey.split(':').map(Number)
+  if (m === 0) return 1
+  if (m === 30) return 0.5
+  if (m === 15 || m === 45) return 0.25
+  return 0.5
 }

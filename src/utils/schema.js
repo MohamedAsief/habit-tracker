@@ -2,18 +2,66 @@ export const STORAGE_KEY = 'habit_tracker_v3'
 export const LEGACY_KEY  = 'habit_tracker_v2'
 export const REVISION_INTERVALS = [1, 3, 6, 9, 14]
 
-// 9 categories — added Neutral
+// 3 parent categories with sub-items
 export const BUILTIN_CATEGORIES = [
-  { id: 'sleep',     name: 'Sleep',     useful: true,  neutral: false, color: '#54a0ff' },
-  { id: 'study',     name: 'Study',     useful: true,  neutral: false, color: '#7c6aff' },
-  { id: 'work',      name: 'Work',      useful: true,  neutral: false, color: '#5f27cd' },
-  { id: 'workout',   name: 'Workout',   useful: true,  neutral: false, color: '#b8ff6a' },
-  { id: 'eating',    name: 'Eating',    useful: false, neutral: true,  color: '#ffa502' },
-  { id: 'scrolling', name: 'Scrolling', useful: false, neutral: false, color: '#ff6b4a' },
-  { id: 'playing',   name: 'Playing',   useful: false, neutral: true,  color: '#a29bfe' },
-  { id: 'idle',      name: 'Idle',      useful: false, neutral: false, color: '#636e72' },
-  { id: 'neutral',   name: 'Neutral',   useful: false, neutral: true,  color: '#00b894' },
+  {
+    id: 'productive', name: 'Productive', emoji: '⚡',
+    color: '#26de81', type: 'productive',
+    subs: [
+      { id: 'work',     name: 'Work' },
+      { id: 'study',    name: 'Study' },
+      { id: 'exercise', name: 'Exercise' },
+    ]
+  },
+  {
+    id: 'recharge', name: 'Recharge', emoji: '🔋',
+    color: '#54a0ff', type: 'recharge',
+    subs: [
+      { id: 'sleep',    name: 'Sleep' },
+      { id: 'hygiene',  name: 'Hygiene' },
+      { id: 'eating',   name: 'Eating' },
+      { id: 'selfcare', name: 'Selfcare' },
+      { id: 'travel',   name: 'Travel' },
+      { id: 'playing',  name: 'Playing' },
+    ]
+  },
+  {
+    id: 'distracted', name: 'Distracted', emoji: '📵',
+    color: '#ff6b4a', type: 'distracted',
+    subs: [
+      { id: 'scrolling', name: 'Scrolling' },
+      { id: 'idle',      name: 'Idle' },
+      { id: 'nothing',   name: 'Nothing' },
+    ]
+  },
 ]
+
+// Flat lookup helper
+export function getAllSubCats(customCategories = []) {
+  const all = []
+  for (const cat of BUILTIN_CATEGORIES) {
+    for (const sub of cat.subs) {
+      all.push({ ...sub, parentId: cat.id, color: cat.color, type: cat.type })
+    }
+  }
+  for (const c of customCategories) all.push(c)
+  return all
+}
+
+export function getCatColor(catId, customCategories = []) {
+  const all = getAllSubCats(customCategories)
+  return all.find(c => c.id === catId)?.color || '#8b8b9e'
+}
+
+export function getCatName(catId, customCategories = []) {
+  const all = getAllSubCats(customCategories)
+  return all.find(c => c.id === catId)?.name || catId
+}
+
+export function getCatType(catId, customCategories = []) {
+  const all = getAllSubCats(customCategories)
+  return all.find(c => c.id === catId)?.type || 'distracted'
+}
 
 export function makeDefaultState() {
   const listId = 'list_default'

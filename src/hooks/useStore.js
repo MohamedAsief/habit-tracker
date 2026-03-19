@@ -24,7 +24,6 @@ export function useStore(user) {
   const [syncing, setSyncing] = useState(false)
   const saveTimer = useRef(null)
 
-  // Load from Firestore when user logs in
   useEffect(() => {
     if (!user) return
     setSyncing(true)
@@ -32,10 +31,8 @@ export function useStore(user) {
     getDoc(ref).then(snap => {
       if (snap.exists()) {
         const data = { ...makeDefaultState(), ...snap.data() }
-        setState(data)
-        saveLocal(data)
+        setState(data); saveLocal(data)
       } else {
-        // First time — push local data to Firestore
         const local = loadLocal()
         setDoc(ref, local)
       }
@@ -43,7 +40,6 @@ export function useStore(user) {
     }).catch(() => setSyncing(false))
   }, [user])
 
-  // Debounced save to Firestore
   const patch = useCallback((fn) => {
     setState(prev => {
       const next = fn(prev)
@@ -59,12 +55,10 @@ export function useStore(user) {
     })
   }, [user])
 
-  // ── Settings ──────────────────────────────────────────────
   const setActiveTab  = useCallback((tab)   => patch(s => ({ ...s, settings: { ...s.settings, activeTab: tab } })), [patch])
   const setActiveList = useCallback((id)    => patch(s => ({ ...s, settings: { ...s.settings, activeListId: id } })), [patch])
   const setTheme      = useCallback((theme) => patch(s => ({ ...s, settings: { ...s.settings, theme } })), [patch])
 
-  // ── Lists ─────────────────────────────────────────────────
   const addList = useCallback((name) => {
     const id = `list_${Date.now()}`
     patch(s => ({
@@ -98,7 +92,6 @@ export function useStore(user) {
       }
     }), [patch])
 
-  // ── Habits ────────────────────────────────────────────────
   const addHabit = useCallback((listId, name, emoji = '⭐', color = '#7c6aff') =>
     patch(s => ({
       ...s,
@@ -127,11 +120,8 @@ export function useStore(user) {
     })), [patch])
 
   const reorderHabits = useCallback((listId, habits) =>
-    patch(s => ({
-      ...s, lists: s.lists.map(l => l.id !== listId ? l : { ...l, habits })
-    })), [patch])
+    patch(s => ({ ...s, lists: s.lists.map(l => l.id !== listId ? l : { ...l, habits }) })), [patch])
 
-  // ── Logs ──────────────────────────────────────────────────
   const toggleCell = useCallback((listId, habitId, dateStr) =>
     patch(s => {
       const listLogs = s.logs[listId] || {}
@@ -144,7 +134,6 @@ export function useStore(user) {
   const getCellState = useCallback((listId, habitId, dateStr) =>
     state.logs[listId]?.[dateStr]?.[habitId] ?? null, [state.logs])
 
-  // ── Journal ───────────────────────────────────────────────
   const setJournalSlot = useCallback((dateStr, slot, data) =>
     patch(s => ({
       ...s, journal: { ...s.journal, [dateStr]: { ...(s.journal[dateStr] || {}), [slot]: data } }
@@ -163,27 +152,22 @@ export function useStore(user) {
       return { ...s, journal: { ...s.journal, [dateStr]: day } }
     }), [patch])
 
-  const addCustomCategory = useCallback((name, useful = true) =>
+  const addCustomCategory = useCallback((name, useful = false, neutral = false, parentId = 'distracted', color = '#a29bfe') =>
     patch(s => ({
       ...s, customCategories: [...(s.customCategories || []),
-        { id: `cat_${Date.now()}`, name, useful, color: '#a29bfe' }]
+        { id: `cat_${Date.now()}`, name, useful, neutral, parentId, color,
+          type: parentId === 'productive' ? 'productive' : parentId === 'recharge' ? 'recharge' : 'distracted' }]
     })), [patch])
 
-  // ── Repetition ────────────────────────────────────────────
   const addRepetitionCard = useCallback((title, note = '') =>
     patch(s => ({ ...s, repetition: [...s.repetition, createCard(title, note)] })), [patch])
 
   const reviewCard = useCallback((id) =>
-    patch(s => {
-      const updated = s.repetition.map(c => c.id === id ? markReviewed(c) : c)
-      // Remove completed cards after a short delay (handled in UI)
-      return { ...s, repetition: updated }
-    }), [patch])
+    patch(s => ({ ...s, repetition: s.repetition.map(c => c.id === id ? markReviewed(c) : c) })), [patch])
 
   const deleteRepetitionCard = useCallback((id) =>
     patch(s => ({ ...s, repetition: s.repetition.filter(c => c.id !== id) })), [patch])
 
-  // ── Timer ─────────────────────────────────────────────────
   const addTimerSession = useCallback((session) =>
     patch(s => ({
       ...s, timerSessions: [...(s.timerSessions || []), {
@@ -192,11 +176,9 @@ export function useStore(user) {
       }]
     })), [patch])
 
-  // ── Moods ─────────────────────────────────────────────────
   const setMood = useCallback((dateStr, mood) =>
     patch(s => ({ ...s, moods: { ...s.moods, [dateStr]: mood } })), [patch])
 
-  // ── Export ────────────────────────────────────────────────
   const exportData = useCallback((format = 'json', listId = null) => {
     let content, filename, type
     if (format === 'json') {

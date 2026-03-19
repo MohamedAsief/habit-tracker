@@ -218,8 +218,34 @@ export default function ReportPage({ store }) {
 
             {habitRows.length>0 && (
               <div className="card-bg rounded-2xl p-4">
-                <p className="text-xs text-muted font-mono uppercase tracking-widest mb-4">Habit Leaderboard</p>
-                {habitRows.map(h => <MiniBar key={h.id} label={`${h.emoji} ${h.name}`} value={h.count} max={Math.max(...habitRows.map(r=>r.count),1)} color={h.color}/>)}
+                <p className="text-xs text-muted font-mono uppercase tracking-widest mb-4">📊 Habit Progress</p>
+                <div className="flex flex-col gap-3">
+                  {habitRows.map((h, i) => {
+                    const maxVal = Math.max(...habitRows.map(r=>r.count), 1)
+                    const pct = (h.count / maxVal) * 100
+                    return (
+                      <div key={h.id}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{h.emoji}</span>
+                            <span className="text-sm font-semibold text-main truncate max-w-[140px]">{h.name}</span>
+                          </div>
+                          <span className="font-mono text-sm font-bold ml-2 shrink-0" style={{color: h.color}}>{h.count}</span>
+                        </div>
+                        <div className="relative h-7 bg-border rounded-xl overflow-hidden">
+                          <div className="h-full rounded-xl transition-all duration-700 flex items-center px-3"
+                            style={{width:`${Math.max(pct,4)}%`, background: `linear-gradient(90deg, ${h.color}cc, ${h.color})`}}>
+                          </div>
+                          {h.streak > 0 && (
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-white/80">
+                              🔥{h.streak}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>
