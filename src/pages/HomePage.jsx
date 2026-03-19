@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-import { getWeekDays, toDateStr, formatMonthYear, computeStats } from '../utils/dates.js'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { getWeekDays, toDateStr, formatMonthYear } from '../utils/dates.js'
 import WeekRow from '../components/WeekRow.jsx'
 import HabitRow from '../components/HabitRow.jsx'
 import AddHabitModal from '../components/AddHabitModal.jsx'
@@ -23,7 +23,7 @@ function ListTab({ list, active, onClick, onRename, onDelete, onDuplicate }) {
         className={`px-3 py-1.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${active ? 'bg-accent text-white shadow-lg' : 'text-muted hover:text-main'}`}>
         {list.name}
       </button>
-      <button onClick={() => setMenu(v => !v)} className="p-1 text-muted hover:text-main rounded transition-all" aria-label="List options">
+      <button onClick={() => setMenu(v => !v)} className="p-1 text-muted hover:text-main rounded transition-all">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
       </button>
       {menu && (
@@ -54,6 +54,23 @@ export default function HomePage({ store }) {
   const [weekOffset, setWeekOffset]     = useState(0)
   const [dragIdx, setDragIdx]           = useState(null)
 
+  // Swipe detection
+  const touchStartX = useRef(null)
+  const containerRef = useRef()
+
+  const handleTouchStart = useCallback((e) => {
+    touchStartX.current = e.touches[0].clientX
+  }, [])
+
+  const handleTouchEnd = useCallback((e) => {
+    if (touchStartX.current === null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(dx) > 60) {
+      setWeekOffset(o => dx < 0 ? o + 1 : o - 1)
+    }
+    touchStartX.current = null
+  }, [])
+
   const today    = new Date()
   const refDate  = new Date(today); refDate.setDate(today.getDate() + weekOffset * 7)
   const weekDays = getWeekDays(refDate)
@@ -75,13 +92,18 @@ export default function HomePage({ store }) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-base">
-      {/* ── BIG sticky header ── */}
+    <div className="flex flex-col min-h-screen bg-base"
+      ref={containerRef}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}>
+
+      {/* Sticky header */}
       <div className="sticky top-0 z-20 glass border-b border-theme">
-        {/* Month + week nav — bigger */}
-        <div className="flex items-center justify-between px-4 pt-5 pb-2 pr-24">
+        {/* Month + week nav */}
+        <div className="flex items-center justify-between px-4 pt-5 pb-2">
           <button onClick={() => setWeekOffset(o => o - 1)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-surface text-muted hover:text-main transition-all" aria-label="Previous week">
+            className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-surface text-muted hover:text-main transition-all"
+            aria-label="Previous week">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
           <div className="text-center">
@@ -93,7 +115,8 @@ export default function HomePage({ store }) {
             </p>
           </div>
           <button onClick={() => setWeekOffset(o => o + 1)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-surface text-muted hover:text-main transition-all" aria-label="Next week">
+            className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-surface text-muted hover:text-main transition-all"
+            aria-label="Next week">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
           </button>
         </div>
@@ -153,16 +176,17 @@ export default function HomePage({ store }) {
               onDelete={() => handleDeleteHabit(h)} />
           </div>
         ))}
-        {habits.length > 0 && <p className="text-center text-[10px] text-muted opacity-30 py-2 font-mono">Drag to reorder</p>}
+        {habits.length > 0 && <p className="text-center text-[10px] text-muted opacity-30 py-2 font-mono">Drag to reorder · Swipe to change week</p>}
       </div>
 
       {/* FAB */}
       <button onClick={() => setShowAdd(true)}
-        className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 w-14 h-14 rounded-full bg-accent glow-btn flex items-center justify-center"
+        className="fixed bottom-28 left-1/2 -translate-x-1/2 z-30 w-14 h-14 rounded-full bg-accent glow-btn flex items-center justify-center"
         aria-label="Add habit">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
       </button>
 
+      {/* Modals */}
       {showAdd && <AddHabitModal onAdd={({ name, emoji, color }) => addHabit(activeListId, name, emoji, color)} onClose={() => setShowAdd(false)} />}
       {editHabit && <AddHabitModal editHabit={editHabit} onAdd={({ name, emoji, color }) => updateHabit(activeListId, editHabit.id, { name, emoji, color })} onClose={() => setEditHabit(null)} />}
 
