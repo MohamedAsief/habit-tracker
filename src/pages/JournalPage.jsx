@@ -3,6 +3,8 @@ import { toDateStr } from '../utils/dates.js'
 import { BUILTIN_CATEGORIES } from '../utils/schema.js'
 import Modal from '../components/Modal.jsx'
 
+function pad(n) { return String(n).padStart(2,'0') }
+
 function formatHour12(h) {
   if (h === 0)  return '12 AM'
   if (h < 12)   return `${h} AM`
@@ -10,15 +12,21 @@ function formatHour12(h) {
   return `${h - 12} PM`
 }
 
-function pad(n) { return String(n).padStart(2,'0') }
+function formatRange(h, granularity) {
+  const start = formatHour12(h)
+  if (granularity === 60) {
+    const end = formatHour12(h + 1)
+    return `${start} – ${end}`
+  }
+  return `${start}`
+}
 
 function getParentCat(catId, customCategories) {
-  for (const cat of BUILTIN_CATEGORIES) {
+  for (const cat of BUILTIN_CATEGORIES)
     if (cat.subs.find(s => s.id === catId)) return cat
-  }
   const custom = customCategories.find(c => c.id === catId)
   if (custom) return BUILTIN_CATEGORIES.find(c => c.id === custom.parentId) || BUILTIN_CATEGORIES[2]
-  return null
+  return BUILTIN_CATEGORIES[2]
 }
 
 function getCatColor(catId, customCategories) {
@@ -33,8 +41,7 @@ function getCatName(catId, customCategories) {
 }
 
 function getCatType(catId, customCategories) {
-  const parent = getParentCat(catId, customCategories)
-  return parent?.id || 'distracted'
+  return getParentCat(catId, customCategories)?.id || 'distracted'
 }
 
 function slotDuration(slot) {
@@ -44,9 +51,8 @@ function slotDuration(slot) {
   return 0.25
 }
 
-function HourBlock({ hour, dayJournal, onSelect, multiMode, selectedSlots, onMultiSelect, customCategories }) {
-  const [granularity, setGranularity] = useState(60) // 60=1hr, 30=30min, 15=15min
-
+function HourBlock({ hour, dayJournal, onSelect, multiMode, selectedSlots, customCategories }) {
+  const [granularity, setGranularity] = useState(60)
   const slots = []
   for (let m = 0; m < 60; m += granularity) slots.push(`${pad(hour)}:${pad(m)}`)
 
@@ -72,16 +78,18 @@ function HourBlock({ hour, dayJournal, onSelect, multiMode, selectedSlots, onMul
           const isSel = selectedSlots.has(slot)
           return (
             <button key={slot}
-              onClick={() => multiMode ? onMultiSelect(slot) : onSelect(slot, entry)}
+              onClick={() => multiMode
+                ? (selectedSlots.has(slot)
+                    ? (selectedSlots.delete(slot))
+                    : selectedSlots.add(slot))
+                : onSelect(slot, entry, granularity)}
               className={`flex items-center gap-2 px-3 rounded-xl border text-left transition-all active:scale-95
-                ${slots.length>1 ? 'py-2' : 'py-3.5'}
-                ${isSel ? 'ring-2 ring-accent' : ''}`}
+                ${slots.length>1?'py-2':'py-3.5'}
+                ${isSel?'ring-2 ring-accent':''}`}
               style={entry
-                ? { background:`${color}22`, borderColor:`${color}55` }
-                : { background:'var(--surface)', borderColor:'var(--border)' }}>
-              {slots.length > 1 && (
-                <span className="font-mono text-[9px] text-muted shrink-0 w-6">{slot.split(':')[1]}</span>
-              )}
+                ? {background:`${color}22`,borderColor:`${color}55`}
+                : {background:'var(--surface)',borderColor:'var(--border)'}}>
+              {slots.length>1 && <span className="font-mono text-[9px] text-muted shrink-0 w-6">{slot.split(':')[1]}</span>}
               <div className="flex-1 min-w-0">
                 {entry
                   ? <p className="text-sm font-bold truncate" style={{color}}>{name}</p>
@@ -96,27 +104,66 @@ function HourBlock({ hour, dayJournal, onSelect, multiMode, selectedSlots, onMul
   )
 }
 
+// Category button with long press to edit/delete
+function CatButton({ cat, selected, onSelect, onEdit, onDelete, isCustom }) {
+  const timer = useRef(null)
+  const [showMenu, setShowMenu] = useState(false)
+
+  const handlePressStart = () => {
+    timer.current = setTimeout(() => setShowMenu(true), 600)
+  }
+  const handlePressEnd = () => clearTimeout(timer.current)
+
+  return (
+    <div className="relative">
+      <button
+        onMouseDown={handlePressStart} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd}
+        onTouchStart={handlePressStart} onTouchEnd={handlePressEnd}
+        onClick={() => !showMenu && onSelect(cat.id === selected ? '' : cat.id)}
+        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border
+          ${selected === cat.id ? 'text-white border-transparent' : 'border-theme text-muted'}`}
+        style={selected === cat.id ? {background:cat.color} : {}}>
+        {cat.name}
+      </button>
+      {showMenu && (
+        <div className="absolute top-8 left-0 z-50 card-bg border border-theme rounded-xl shadow-xl py-1 min-w-[100px]">
+          {isCustom && (
+            <>
+              <button className="menu-item text-xs" onClick={() => { onEdit(cat); setShowMenu(false) }}>✏️ Edit</button>
+              <button className="menu-item text-xs text-ember" onClick={() => { onDelete(cat.id); setShowMenu(false) }}>🗑️ Delete</button>
+            </>
+          )}
+          <button className="menu-item text-xs" onClick={() => setShowMenu(false)}>✕ Close</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function JournalPage({ store }) {
   const { state, setJournalSlot, setJournalSlots, clearJournalSlot, addCustomCategory, deleteCustomCategory } = store
   const { journal, customCategories=[] } = state
 
   const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()))
   const [editSlot, setEditSlot]         = useState(null)
+  const [editGranularity, setEditGranularity] = useState(60)
   const [slotCat, setSlotCat]           = useState('')
   const [slotNote, setSlotNote]         = useState('')
   const [multiMode, setMultiMode]       = useState(false)
   const [selected, setSelected]         = useState(new Set())
   const [half, setHalf]                 = useState('am')
-  const [newCatModal, setNewCatModal]   = useState(false)
+
+  // Add/edit custom category state
+  const [addCatModal, setAddCatModal]   = useState(null) // parentId
+  const [editCatItem, setEditCatItem]   = useState(null) // { id, name, parentId }
   const [newCatName, setNewCatName]     = useState('')
-  const [newCatParent, setNewCatParent] = useState('productive')
 
   const dayJournal = journal[selectedDate] || {}
   const amHours = Array.from({length:12},(_,i)=>i)
   const pmHours = Array.from({length:12},(_,i)=>i+12)
   const displayHours = half==='am' ? amHours : pmHours
 
-  // Swipe to switch AM/PM
+  // Swipe AM/PM
   const touchStartX = useRef(null)
   const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX }
   const handleTouchEnd = (e) => {
@@ -126,17 +173,19 @@ export default function JournalPage({ store }) {
     touchStartX.current = null
   }
 
-  // Long press for multi-select
+  // Multi select long press
   const longTimer = useRef(null)
-  const startLong = (slot) => {
-    longTimer.current = setTimeout(() => { setMultiMode(true); setSelected(new Set([slot])) }, 600)
-  }
-  const cancelLong = () => clearTimeout(longTimer.current)
 
-  const handleSelect = (slot, entry) => {
-    if (multiMode) { setSelected(prev => { const n=new Set(prev); n.has(slot)?n.delete(slot):n.add(slot); return n }); return }
-    setEditSlot(slot); setSlotCat(entry?.category||''); setSlotNote(entry?.note||'')
-  }
+  const handleSelect = useCallback((slot, entry, gran = 60) => {
+    if (multiMode) {
+      setSelected(prev => { const n=new Set(prev); n.has(slot)?n.delete(slot):n.add(slot); return n })
+      return
+    }
+    setEditSlot(slot)
+    setEditGranularity(gran)
+    setSlotCat(entry?.category||'')
+    setSlotNote(entry?.note||'')
+  }, [multiMode])
 
   const saveSlot = () => {
     if (slotCat) setJournalSlot(selectedDate, editSlot, { category: slotCat, note: slotNote })
@@ -149,33 +198,52 @@ export default function JournalPage({ store }) {
     setMultiMode(false); setSelected(new Set())
   }
 
-  // Stats
-  let productiveH=0, rechargeH=0, distractedH=0
+  // Stats — actual hours only
+  let prodH=0, rechH=0, distH=0
   for (const [slot, data] of Object.entries(dayJournal)) {
     const dur = slotDuration(slot)
     const type = getCatType(data.category, customCategories)
-    if (type==='productive') productiveH+=dur
-    else if (type==='recharge') rechargeH+=dur
-    else distractedH+=dur
+    if (type==='productive') prodH+=dur
+    else if (type==='recharge') rechH+=dur
+    else distH+=dur
   }
-  const totalH = productiveH+rechargeH+distractedH
+  const totalH = prodH+rechH+distH
 
   const exportCSV = () => {
     const rows=[['Date','Slot','Category','Type','Note']]
-    for (const [slot,data] of Object.entries(dayJournal)) {
+    for (const [slot,data] of Object.entries(dayJournal))
       rows.push([selectedDate,slot,getCatName(data.category,customCategories),getCatType(data.category,customCategories),(data.note||'').replace(/,/g,';')])
-    }
     const blob=new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'})
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`journal-${selectedDate}.csv`;a.click()
   }
 
-  // All sub-cats in order: productive → recharge → distracted → custom
-  const allSlotCats = []
-  for (const cat of BUILTIN_CATEGORIES)
-    for (const sub of cat.subs)
-      allSlotCats.push({ ...sub, color: cat.color, parentId: cat.id })
-  for (const c of customCategories)
-    allSlotCats.push({ ...c, color: BUILTIN_CATEGORIES.find(b=>b.id===c.parentId)?.color || '#a29bfe' })
+  // Modal title: "2 AM – 3 AM"
+  const getModalTitle = () => {
+    if (!editSlot) return ''
+    const [hStr, mStr] = editSlot.split(':')
+    const h = parseInt(hStr), m = parseInt(mStr)
+    const startLabel = m===0 ? formatHour12(h) : `${formatHour12(h)} +${m}m`
+    if (editGranularity === 60 && m === 0) return `${formatHour12(h)} – ${formatHour12(h+1)}`
+    if (editGranularity === 30) {
+      const endM = m + 30
+      if (endM === 60) return `${formatHour12(h)}:${pad(m)} – ${formatHour12(h+1)}`
+      return `${formatHour12(h)}:${pad(m)} – ${formatHour12(h)}:${pad(endM)}`
+    }
+    return `${formatHour12(h)}:${pad(m)} – ${formatHour12(h)}:${pad(m+15)}`
+  }
+
+  const handleSaveCustomCat = () => {
+    if (!newCatName.trim()) return
+    if (editCatItem) {
+      // Edit existing
+      store.state.customCategories.find(c => c.id === editCatItem.id)
+      deleteCustomCategory(editCatItem.id)
+      addCustomCategory(newCatName.trim(), editCatItem.parentId)
+    } else {
+      addCustomCategory(newCatName.trim(), addCatModal)
+    }
+    setNewCatName(''); setAddCatModal(null); setEditCatItem(null)
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-base"
@@ -196,24 +264,20 @@ export default function JournalPage({ store }) {
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Stats — actual hours */}
         <div className="flex gap-1.5 pb-3">
-          <div className="flex-1 rounded-xl px-2 py-2 text-center" style={{background:'#26de8115',border:'1px solid #26de8133'}}>
-            <p className="text-[9px] font-mono font-bold" style={{color:'#26de81'}}>⚡</p>
-            <p className="text-sm font-black" style={{color:'#26de81'}}>{productiveH.toFixed(1)}h</p>
-          </div>
-          <div className="flex-1 rounded-xl px-2 py-2 text-center" style={{background:'#54a0ff15',border:'1px solid #54a0ff33'}}>
-            <p className="text-[9px] font-mono font-bold" style={{color:'#54a0ff'}}>🔋</p>
-            <p className="text-sm font-black" style={{color:'#54a0ff'}}>{rechargeH.toFixed(1)}h</p>
-          </div>
-          <div className="flex-1 rounded-xl px-2 py-2 text-center" style={{background:'#ff6b4a15',border:'1px solid #ff6b4a33'}}>
-            <p className="text-[9px] font-mono font-bold" style={{color:'#ff6b4a'}}>📵</p>
-            <p className="text-sm font-black" style={{color:'#ff6b4a'}}>{distractedH.toFixed(1)}h</p>
-          </div>
-          <div className="flex-1 rounded-xl px-2 py-2 text-center card-bg">
-            <p className="text-[9px] text-muted font-mono">Total</p>
-            <p className="text-sm font-black text-accent">{totalH.toFixed(1)}h</p>
-          </div>
+          {[
+            ['⚡', prodH, '#26de81', '#26de8115', '#26de8133'],
+            ['🔋', rechH, '#54a0ff', '#54a0ff15', '#54a0ff33'],
+            ['📵', distH, '#ff6b4a', '#ff6b4a15', '#ff6b4a33'],
+            ['Total', totalH, '#7c6aff', 'var(--card)', 'var(--border)'],
+          ].map(([label, h, color, bg, border]) => (
+            <div key={label} className="flex-1 rounded-xl px-2 py-2 text-center"
+              style={{background:bg, border:`1px solid ${border}`}}>
+              <p className="text-[10px] font-bold" style={{color}}>{label}</p>
+              <p className="text-sm font-black" style={{color}}>{h.toFixed(1)}h</p>
+            </div>
+          ))}
         </div>
 
         {/* AM/PM toggle */}
@@ -233,7 +297,7 @@ export default function JournalPage({ store }) {
       {multiMode && (
         <div className="sticky z-30 px-4 py-2.5 flex items-center gap-2 border-b border-theme"
           style={{background:'#7c6aff',top:0}}>
-          <span className="text-white text-sm font-semibold flex-1">{selected.size} slot{selected.size!==1?'s':''} selected</span>
+          <span className="text-white text-sm font-semibold flex-1">{selected.size} slots selected</span>
           <button onClick={() => { for(const s of selected) clearJournalSlot(selectedDate,s); setMultiMode(false); setSelected(new Set()) }}
             className="text-white/70 text-xs px-2 py-1 rounded-lg border border-white/30">Clear</button>
           <button onClick={() => { setMultiMode(false); setSelected(new Set()) }}
@@ -241,15 +305,20 @@ export default function JournalPage({ store }) {
         </div>
       )}
 
-      {/* Multi category picker — just colored buttons, no labels */}
+      {/* Multi cat picker */}
       {multiMode && selected.size > 0 && (
-        <div className="px-4 py-3 flex flex-wrap gap-2 border-b border-theme" style={{background:'var(--surface)'}}>
-          {allSlotCats.map(cat => (
-            <button key={cat.id} onClick={() => applyMulti(cat.id)}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white active:scale-95"
-              style={{background:cat.color}}>
-              {cat.name}
-            </button>
+        <div className="px-4 py-2 border-b border-theme" style={{background:'var(--surface)'}}>
+          {BUILTIN_CATEGORIES.map(cat => (
+            <div key={cat.id} className="mb-2">
+              <p className="text-[10px] font-bold mb-1" style={{color:cat.color}}>{cat.emoji} {cat.name}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[...cat.subs, ...customCategories.filter(c=>c.parentId===cat.id)].map(sub => (
+                  <button key={sub.id} onClick={() => applyMulti(sub.id)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white"
+                    style={{background:cat.color}}>{sub.name}</button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -257,52 +326,47 @@ export default function JournalPage({ store }) {
       {/* Hour blocks */}
       <div className="flex-1 overflow-y-auto px-4 py-3 pb-24">
         <p className="text-[10px] text-muted opacity-40 mb-3 font-mono text-center">
-          Long press → multi-select · Swipe ← → to switch AM/PM
+          Long press slot → multi-select · Swipe ← → AM/PM
         </p>
         {displayHours.map(hour => (
           <HourBlock key={hour} hour={hour} dayJournal={dayJournal}
             onSelect={handleSelect} multiMode={multiMode}
-            selectedSlots={selected} onMultiSelect={handleSelect}
-            customCategories={customCategories} />
+            selectedSlots={selected} customCategories={customCategories} />
         ))}
       </div>
 
       {/* Edit slot modal */}
       {editSlot && (
-        <Modal title={`${formatHour12(parseInt(editSlot.split(':')[0]))} · ${editSlot.split(':')[1] !== '00' ? editSlot.split(':')[1]+'m' : ''}`}
-          onClose={() => setEditSlot(null)}>
-          {/* All cats as colored buttons — no section labels, just colors */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {allSlotCats.map(cat => (
-              <button key={cat.id} onClick={() => setSlotCat(slotCat===cat.id?'':cat.id)}
-                className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all
-                  ${slotCat===cat.id ? 'text-white ring-2 ring-white/50' : 'text-white opacity-60 hover:opacity-100'}`}
-                style={{background:cat.color}}>
-                {cat.name}
-              </button>
-            ))}
-            <button onClick={() => setNewCatModal(true)}
-              className="px-3 py-2 rounded-xl text-xs text-muted border border-dashed border-theme hover:border-accent hover:text-accent transition-all">
-              + Custom
-            </button>
-          </div>
-
-          {/* Delete custom categories */}
-          {customCategories.length > 0 && (
-            <div className="mb-3 p-3 card-bg rounded-xl">
-              <p className="text-[10px] text-muted font-mono mb-2">Custom (hold to delete)</p>
-              <div className="flex flex-wrap gap-1.5">
-                {customCategories.map(c => (
-                  <div key={c.id} className="flex items-center gap-1 px-2 py-1 rounded-lg"
-                    style={{background:`${BUILTIN_CATEGORIES.find(b=>b.id===c.parentId)?.color||'#a29bfe'}22`}}>
-                    <span className="text-xs text-main">{c.name}</span>
-                    <button onClick={() => deleteCustomCategory(c.id)}
-                      className="text-muted hover:text-ember text-xs ml-1">×</button>
-                  </div>
+        <Modal title={getModalTitle()} onClose={() => setEditSlot(null)}>
+          {BUILTIN_CATEGORIES.map(cat => (
+            <div key={cat.id} className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold" style={{color:cat.color}}>{cat.emoji} {cat.name}</p>
+                <button onClick={() => { setAddCatModal(cat.id); setNewCatName('') }}
+                  className="text-[10px] text-muted hover:text-accent border border-dashed border-theme px-2 py-0.5 rounded-lg transition-all">
+                  + Add
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {cat.subs.map(sub => (
+                  <button key={sub.id}
+                    onClick={() => setSlotCat(slotCat===sub.id?'':sub.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border
+                      ${slotCat===sub.id?'text-white border-transparent':'border-theme text-muted'}`}
+                    style={slotCat===sub.id?{background:cat.color}:{}}>
+                    {sub.name}
+                  </button>
+                ))}
+                {customCategories.filter(c=>c.parentId===cat.id).map(c => (
+                  <CatButton key={c.id} cat={{...c,color:cat.color}} selected={slotCat}
+                    onSelect={setSlotCat}
+                    onEdit={(cat) => { setEditCatItem({...cat,parentId:cat.parentId||cat.id}); setNewCatName(cat.name); setAddCatModal('edit') }}
+                    onDelete={deleteCustomCategory}
+                    isCustom={true} />
                 ))}
               </div>
             </div>
-          )}
+          ))}
 
           <textarea value={slotNote} onChange={e => setSlotNote(e.target.value)}
             placeholder="Note (optional)..." rows={2} className="input-field w-full resize-none mb-4" />
@@ -314,26 +378,18 @@ export default function JournalPage({ store }) {
         </Modal>
       )}
 
-      {/* New custom category */}
-      {newCatModal && (
-        <Modal title="New Category" onClose={() => setNewCatModal(false)} size="sm">
+      {/* Add/Edit custom category modal */}
+      {(addCatModal || editCatItem) && (
+        <Modal title={editCatItem ? 'Edit Category' : `Add to ${BUILTIN_CATEGORIES.find(c=>c.id===addCatModal)?.name||''}`}
+          onClose={() => { setAddCatModal(null); setEditCatItem(null); setNewCatName('') }} size="sm">
           <input value={newCatName} onChange={e => setNewCatName(e.target.value)}
-            placeholder="Category name..." className="input-field w-full mb-4" autoFocus />
-          <p className="text-xs text-muted mb-2 font-mono uppercase tracking-widest">Belongs to</p>
-          <div className="flex gap-2 mb-5">
-            {BUILTIN_CATEGORIES.map(cat => (
-              <button key={cat.id} onClick={() => setNewCatParent(cat.id)}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all text-white
-                  ${newCatParent===cat.id?'ring-2 ring-white/50':'opacity-50'}`}
-                style={{background:cat.color}}>
-                {cat.emoji}
-              </button>
-            ))}
-          </div>
+            placeholder="Category name..." className="input-field w-full mb-4" autoFocus
+            onKeyDown={e => e.key==='Enter' && handleSaveCustomCat()} />
           <div className="flex gap-3">
-            <button onClick={() => setNewCatModal(false)} className="flex-1 btn-secondary">Cancel</button>
-            <button onClick={() => { addCustomCategory(newCatName.trim(), newCatParent); setNewCatModal(false); setNewCatName('') }}
-              disabled={!newCatName.trim()} className="flex-1 btn-primary">Add</button>
+            <button onClick={() => { setAddCatModal(null); setEditCatItem(null); setNewCatName('') }}
+              className="flex-1 btn-secondary">Cancel</button>
+            <button onClick={handleSaveCustomCat} disabled={!newCatName.trim()}
+              className="flex-1 btn-primary">Save</button>
           </div>
         </Modal>
       )}

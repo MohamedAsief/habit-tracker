@@ -224,23 +224,37 @@ export default function ReportPage({ store }) {
   }))
   const maxDayMs = Math.max(...dayTotals.map(d=>d.ms),1)
 
-  // Journal stats
-  const { usefulSlots, wastedSlots, catCounts } = useMemo(() => {
-    let useful=0, wasted=0; const counts={}
+  // Journal stats — using new productive/recharge/distracted system
+  const JCOLORS = { productive:'#26de81', recharge:'#54a0ff', distracted:'#ff6b4a' }
+  
+  function getJType(catId) {
+    for (const cat of BUILTIN_CATEGORIES)
+      if (cat.subs.find(s=>s.id===catId)) return cat.id
+    return (customCategories||[]).find(c=>c.id===catId)?.parentId || 'distracted'
+  }
+  function getJDur(slot) {
+    const m=parseInt(slot.split(':')[1]); return m===0?1:m===30?0.5:0.25
+  }
+  
+  const { prodH, rechH, distH, hourData } = useMemo(() => {
+    let p=0,r=0,d=0; const hd={}
     for (const ds of daysToCheck) {
-      for (const {category} of Object.values(journal[ds]||{})) {
-        const cat=allCats.find(c=>c.id===category)
-        if (cat) { cat.useful?useful++:wasted++; counts[category]=(counts[category]||0)+0.5 }
+      for (const [slot, data] of Object.entries(journal[ds]||{})) {
+        const h=parseInt(slot.split(':')[0])
+        const dur=getJDur(slot)
+        const type=getJType(data.category)
+        if (!hd[h]) hd[h]={productive:0,recharge:0,distracted:0}
+        hd[h][type]=(hd[h][type]||0)+dur
+        if(type==='productive')p+=dur
+        else if(type==='recharge')r+=dur
+        else d+=dur
       }
     }
-    return { usefulSlots:useful, wastedSlots:wasted, catCounts:counts }
+    return {prodH:p,rechH:r,distH:d,hourData:hd}
   }, [daysToCheck, journal])
-
-  const topCats = Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).slice(0,6)
-  const pieSlices = [
-    {value:usefulSlots, color:'#b8ff6a', label:'Useful'},
-    {value:wastedSlots, color:'#ff6b4a', label:'Wasted'},
-  ]
+  
+  const totalJH = prodH+rechH+distH
+  const maxHourH = Math.max(...Object.values(hourData).map(h=>h.productive+h.recharge+h.distracted),1)
 
   // Weekly rate from computeStats
   const weekRate  = stats.weekRate  || 0
