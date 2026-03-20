@@ -61,12 +61,7 @@ export function useStore(user) {
 
   const addList = useCallback((name) => {
     const id = `list_${Date.now()}`
-    patch(s => ({
-      ...s,
-      lists: [...s.lists, { id, name, order: s.lists.length, habits: [] }],
-      logs: { ...s.logs, [id]: {} },
-      settings: { ...s.settings, activeListId: id }
-    }))
+    patch(s => ({ ...s, lists: [...s.lists, { id, name, order: s.lists.length, habits: [] }], logs: { ...s.logs, [id]: {} }, settings: { ...s.settings, activeListId: id } }))
   }, [patch])
 
   const renameList = useCallback((id, name) =>
@@ -84,40 +79,17 @@ export function useStore(user) {
       const src = s.lists.find(l => l.id === id)
       if (!src) return s
       const newId = `list_${Date.now()}`
-      return {
-        ...s,
-        lists: [...s.lists, { ...src, id: newId, name: `${src.name} (copy)`,
-          habits: src.habits.map(h => ({ ...h, id: `h_${Date.now()}_${Math.random()}` })) }],
-        logs: { ...s.logs, [newId]: {} }
-      }
+      return { ...s, lists: [...s.lists, { ...src, id: newId, name: `${src.name} (copy)`, habits: src.habits.map(h => ({ ...h, id: `h_${Date.now()}_${Math.random()}` })) }], logs: { ...s.logs, [newId]: {} } }
     }), [patch])
 
   const addHabit = useCallback((listId, name, emoji = '⭐', color = '#7c6aff') =>
-    patch(s => ({
-      ...s,
-      lists: s.lists.map(l => l.id !== listId ? l : {
-        ...l, habits: [...l.habits, {
-          id: `h_${Date.now()}`, name, emoji, color,
-          order: l.habits.length, createdAt: new Date().toISOString()
-        }]
-      })
-    })), [patch])
+    patch(s => ({ ...s, lists: s.lists.map(l => l.id !== listId ? l : { ...l, habits: [...l.habits, { id: `h_${Date.now()}`, name, emoji, color, order: l.habits.length, createdAt: new Date().toISOString() }] }) })), [patch])
 
   const updateHabit = useCallback((listId, habitId, updates) =>
-    patch(s => ({
-      ...s,
-      lists: s.lists.map(l => l.id !== listId ? l : {
-        ...l, habits: l.habits.map(h => h.id !== habitId ? h : { ...h, ...updates })
-      })
-    })), [patch])
+    patch(s => ({ ...s, lists: s.lists.map(l => l.id !== listId ? l : { ...l, habits: l.habits.map(h => h.id !== habitId ? h : { ...h, ...updates }) }) })), [patch])
 
   const deleteHabit = useCallback((listId, habitId) =>
-    patch(s => ({
-      ...s,
-      lists: s.lists.map(l => l.id !== listId ? l : {
-        ...l, habits: l.habits.filter(h => h.id !== habitId)
-      })
-    })), [patch])
+    patch(s => ({ ...s, lists: s.lists.map(l => l.id !== listId ? l : { ...l, habits: l.habits.filter(h => h.id !== habitId) }) })), [patch])
 
   const reorderHabits = useCallback((listId, habits) =>
     patch(s => ({ ...s, lists: s.lists.map(l => l.id !== listId ? l : { ...l, habits }) })), [patch])
@@ -135,9 +107,7 @@ export function useStore(user) {
     state.logs[listId]?.[dateStr]?.[habitId] ?? null, [state.logs])
 
   const setJournalSlot = useCallback((dateStr, slot, data) =>
-    patch(s => ({
-      ...s, journal: { ...s.journal, [dateStr]: { ...(s.journal[dateStr] || {}), [slot]: data } }
-    })), [patch])
+    patch(s => ({ ...s, journal: { ...s.journal, [dateStr]: { ...(s.journal[dateStr] || {}), [slot]: data } } })), [patch])
 
   const setJournalSlots = useCallback((dateStr, slots, data) =>
     patch(s => {
@@ -152,15 +122,22 @@ export function useStore(user) {
       return { ...s, journal: { ...s.journal, [dateStr]: day } }
     }), [patch])
 
-  const addCustomCategory = useCallback((name, useful = false, neutral = false, parentId = 'distracted', color = '#a29bfe') =>
+  const addCustomCategory = useCallback((name, parentId = 'distracted') => {
+    const colorMap = { productive: '#26de81', recharge: '#54a0ff', distracted: '#ff6b4a' }
     patch(s => ({
       ...s, customCategories: [...(s.customCategories || []),
-        { id: `cat_${Date.now()}`, name, useful, neutral, parentId, color,
-          type: parentId === 'productive' ? 'productive' : parentId === 'recharge' ? 'recharge' : 'distracted' }]
-    })), [patch])
+        { id: `cat_${Date.now()}`, name, parentId, color: colorMap[parentId] || '#a29bfe', type: parentId }]
+    }))
+  }, [patch])
+
+  const deleteCustomCategory = useCallback((id) =>
+    patch(s => ({ ...s, customCategories: (s.customCategories || []).filter(c => c.id !== id) })), [patch])
 
   const addRepetitionCard = useCallback((title, note = '') =>
     patch(s => ({ ...s, repetition: [...s.repetition, createCard(title, note)] })), [patch])
+
+  const updateRepetitionCard = useCallback((id, updates) =>
+    patch(s => ({ ...s, repetition: s.repetition.map(c => c.id === id ? { ...c, ...updates } : c) })), [patch])
 
   const reviewCard = useCallback((id) =>
     patch(s => ({ ...s, repetition: s.repetition.map(c => c.id === id ? markReviewed(c) : c) })), [patch])
@@ -169,12 +146,7 @@ export function useStore(user) {
     patch(s => ({ ...s, repetition: s.repetition.filter(c => c.id !== id) })), [patch])
 
   const addTimerSession = useCallback((session) =>
-    patch(s => ({
-      ...s, timerSessions: [...(s.timerSessions || []), {
-        id: `ts_${Date.now()}`, at: new Date().toISOString(),
-        date: toDateStr(new Date()), ...session
-      }]
-    })), [patch])
+    patch(s => ({ ...s, timerSessions: [...(s.timerSessions || []), { id: `ts_${Date.now()}`, at: new Date().toISOString(), date: toDateStr(new Date()), ...session }] })), [patch])
 
   const setMood = useCallback((dateStr, mood) =>
     patch(s => ({ ...s, moods: { ...s.moods, [dateStr]: mood } })), [patch])
@@ -187,12 +159,11 @@ export function useStore(user) {
       const rows = [['Date', 'List', 'Habit', 'Status']]
       for (const list of state.lists) {
         if (listId && list.id !== listId) continue
-        for (const [ds, dayLog] of Object.entries(state.logs[list.id] || {})) {
+        for (const [ds, dayLog] of Object.entries(state.logs[list.id] || {}))
           for (const [hid, status] of Object.entries(dayLog)) {
             const h = list.habits.find(h => h.id === hid)
             if (h && status) rows.push([ds, list.name, h.name, status])
           }
-        }
       }
       content = rows.map(r => r.join(',')).join('\n'); filename = 'asido-export.csv'; type = 'text/csv'
     }
@@ -208,8 +179,9 @@ export function useStore(user) {
     addList, renameList, deleteList, duplicateList,
     addHabit, updateHabit, deleteHabit, reorderHabits,
     toggleCell, getCellState,
-    setJournalSlot, setJournalSlots, clearJournalSlot, addCustomCategory,
-    addRepetitionCard, reviewCard, deleteRepetitionCard,
+    setJournalSlot, setJournalSlots, clearJournalSlot,
+    addCustomCategory, deleteCustomCategory,
+    addRepetitionCard, updateRepetitionCard, reviewCard, deleteRepetitionCard,
     addTimerSession, setMood, exportData,
   }
 }

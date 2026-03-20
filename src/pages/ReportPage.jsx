@@ -1,5 +1,110 @@
+
+function getParentType(catId, customCategories) {
+  for (const cat of BUILTIN_CATEGORIES)
+    if (cat.subs.find(s => s.id === catId)) return cat.id
+  return customCategories.find(c => c.id === catId)?.parentId || 'distracted'
+}
+
+function getCatColor2(catId, customCategories) {
+  for (const cat of BUILTIN_CATEGORIES)
+    if (cat.subs.find(s => s.id === catId)) return cat.color
+  const custom = customCategories.find(c => c.id === catId)
+  return BUILTIN_CATEGORIES.find(b => b.id === custom?.parentId)?.color || '#8b8b9e'
+}
+
+function JournalReport({ journal, customCategories=[], daysToCheck }) {
+  const COLORS = { productive: '#26de81', recharge: '#54a0ff', distracted: '#ff6b4a' }
+  
+  // Compute totals
+  let prodH=0, rechH=0, distH=0
+  const hourData = {} // hour -> { productive, recharge, distracted }
+  
+  for (const ds of daysToCheck) {
+    for (const [slot, data] of Object.entries(journal[ds]||{})) {
+      const h = parseInt(slot.split(':')[0])
+      const mm = parseInt(slot.split(':')[1])
+      const dur = mm===0 ? 1 : mm===30 ? 0.5 : 0.25
+      const type = getParentType(data.category, customCategories)
+      if (!hourData[h]) hourData[h] = { productive:0, recharge:0, distracted:0 }
+      hourData[h][type] = (hourData[h][type]||0) + dur
+      if (type==='productive') prodH+=dur
+      else if (type==='recharge') rechH+=dur
+      else distH+=dur
+    }
+  }
+  
+  const totalH = prodH+rechH+distH
+  const maxHourH = Math.max(...Object.values(hourData).map(h=>h.productive+h.recharge+h.distracted), 1)
+  const hours = Array.from({length:24},(_,i)=>i)
+  
+  if (totalH === 0) return <p className="text-center text-muted py-12">No journal entries for this period</p>
+  
+  return (
+    <div>
+      {/* Total + 3 type cards */}
+      <div className="card-bg rounded-2xl p-4 mb-4">
+        <p className="font-mono text-[10px] text-muted uppercase tracking-widest mb-1">Total Logged</p>
+        <p className="font-display text-4xl font-black text-main mb-3">{totalH.toFixed(1)}h</p>
+        <div className="flex gap-2">
+          {[['productive','⚡',prodH],['recharge','🔋',rechH],['distracted','📵',distH]].map(([type,emoji,h])=>(
+            <div key={type} className="flex-1 rounded-xl px-2 py-2 text-center"
+              style={{background:`${COLORS[type]}15`,border:`1px solid ${COLORS[type]}33`}}>
+              <p className="text-base">{emoji}</p>
+              <p className="text-sm font-black" style={{color:COLORS[type]}}>{h.toFixed(1)}h</p>
+              <p className="text-[9px] text-muted">{totalH>0?Math.round((h/totalH)*100):0}%</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Stacked bar chart by hour — like Screen Time */}
+      <div className="card-bg rounded-2xl p-4 mb-4">
+        <p className="font-mono text-[10px] text-muted uppercase tracking-widest mb-4">Hourly Breakdown</p>
+        <div className="flex items-end gap-px" style={{height:'100px'}}>
+          {hours.map(h => {
+            const d = hourData[h] || {}
+            const total = (d.productive||0)+(d.recharge||0)+(d.distracted||0)
+            const pct = (total/maxHourH)*100
+            return (
+              <div key={h} className="flex-1 flex flex-col justify-end" style={{height:'100px'}}>
+                {total > 0 && (
+                  <div className="w-full rounded-t-sm overflow-hidden" style={{height:`${Math.max(pct,3)}%`}}>
+                    {['distracted','recharge','productive'].map(type => {
+                      const h2 = d[type]||0
+                      const p = total>0?(h2/total)*100:0
+                      return p>0 ? <div key={type} style={{height:`${p}%`,background:COLORS[type]}}/> : null
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {/* X axis labels */}
+        <div className="flex mt-1">
+          {['12A','6A','12P','6P'].map((l,i)=>(
+            <div key={i} className="flex-1 text-center">
+              <span className="text-[8px] text-muted font-mono">{l}</span>
+            </div>
+          ))}
+        </div>
+        {/* Legend */}
+        <div className="flex gap-3 mt-3 justify-center">
+          {[['productive','⚡ Productive'],['recharge','🔋 Recharge'],['distracted','📵 Distracted']].map(([type,label])=>(
+            <div key={type} className="flex items-center gap-1">
+              <div className="w-2.5 h-2.5 rounded-sm" style={{background:COLORS[type]}}/>
+              <span className="text-[10px] text-muted">{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 import { useState, useMemo } from 'react'
 import { computeStats, getWeekDays, toDateStr } from '../utils/dates.js'
+import { BUILTIN_CATEGORIES } from '../utils/schema.js'
 import { BUILTIN_CATEGORIES } from '../utils/schema.js'
 
 function fmt(ms) {

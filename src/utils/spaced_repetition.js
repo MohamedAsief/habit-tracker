@@ -1,12 +1,12 @@
 /**
  * ASIDO Spaced Repetition
- * Based on Ebbinghaus Forgetting Curve
- * Revision schedule: Day 1, 3, 6, 9, 14 after topic added
- * At midnight each day, due topics appear in checklist
- * After 5 revisions → auto delete (mastered!)
+ * Day 0 = today (topic added)
+ * First revision = Day 1 (tomorrow)
+ * Schedule: Day 1, 3, 6, 9, 14
+ * After 5 revisions → mastered!
  */
 
-export const REVISION_INTERVALS = [1, 3, 6, 9, 14] // days after adding
+export const REVISION_INTERVALS = [1, 3, 6, 9, 14]
 
 export function getNextDueDate(addedDate, revisionCount) {
   if (revisionCount >= REVISION_INTERVALS.length) return null
@@ -19,7 +19,8 @@ export function getNextDueDate(addedDate, revisionCount) {
 export function getDueCards(cards, today = new Date()) {
   const todayStr = today.toISOString().split('T')[0]
   return cards.filter(c =>
-    c.nextReview && c.nextReview <= todayStr &&
+    c.nextReview &&
+    c.nextReview <= todayStr &&
     (c.revisionCount || 0) < REVISION_INTERVALS.length
   )
 }
@@ -43,13 +44,15 @@ export function markReviewed(card) {
 
 export function createCard(title, note = '') {
   const addedDate = new Date().toISOString().split('T')[0]
+  // First review is TOMORROW (Day 1), not today
+  const nextReview = getNextDueDate(addedDate, 0)
   return {
     id: `sr_${Date.now()}`,
     title,
     note,
     addedDate,
     revisionCount: 0,
-    nextReview: getNextDueDate(addedDate, 0),
+    nextReview,
     lastReview: null,
     completed: false,
     history: []

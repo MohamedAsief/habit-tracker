@@ -100,7 +100,7 @@ export default function HomePage({ store }) {
       {/* Sticky header */}
       <div className="sticky top-0 z-20 glass border-b border-theme">
         {/* Month + week nav */}
-        <div className="flex items-center justify-between px-4 pt-5 pb-2">
+        <div className="flex items-center justify-between px-4 pt-5 pb-2 pr-14">
           <button onClick={() => setWeekOffset(o => o - 1)}
             className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-surface text-muted hover:text-main transition-all"
             aria-label="Previous week">
