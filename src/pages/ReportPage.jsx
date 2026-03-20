@@ -105,7 +105,6 @@ function JournalReport({ journal, customCategories=[], daysToCheck }) {
 import { useState, useMemo } from 'react'
 import { computeStats, getWeekDays, toDateStr } from '../utils/dates.js'
 import { BUILTIN_CATEGORIES } from '../utils/schema.js'
-import { BUILTIN_CATEGORIES } from '../utils/schema.js'
 
 function fmt(ms) {
   const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000)
